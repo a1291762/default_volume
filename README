@@ -17,3 +17,5 @@ Build the program using make
 
 The application creates a tray icon, but has no other user interface.
 Double-click on the tray icon to close the app.
+
+Edit default_volume.ini to change the default percentage from 40.

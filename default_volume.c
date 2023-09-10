@@ -149,11 +149,15 @@ LSTATUS set_volume(HKEY property) {
 		return err;
 	}
 
-	HRESULT hr = volume->lpVtbl->SetMasterVolume(volume, 0.4, NULL);
+	int percent = GetPrivateProfileInt(L"Default", L"Volume", 40, L".\\default_volume.ini");
+	if (percent <= 0 || percent > 100) {
+		percent = 40;
+	}
+	HRESULT hr = volume->lpVtbl->SetMasterVolume(volume, percent/100.0f, NULL);
 	if (hr != S_OK) {
 		printf("Failed to SetMasterVolume %lx\n", hr);
 	}
-	printf("Set the volume to 40%%\n");
+	printf("Set the volume to %d%%\n", percent);
 
 	volume->lpVtbl->Release(volume);
 
