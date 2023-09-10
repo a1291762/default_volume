@@ -1,2 +1,3 @@
 .vscode
-default_volume.exe
+*.exe
+*.o

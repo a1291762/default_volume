@@ -1,0 +1,19 @@
+
+Install MSYS2
+
+Start an MSYS2 shell and install the ucrt compiler, plus make
+
+    pacman -S mingw-w64-ucrt-x86_64-gcc
+    pacman -S make
+
+Use the MSYS2 UCRT64 shell, or if using another terminal, add these 2
+directories to your PATH
+
+    set PATH=c:\msys64\ucrt64\bin;c:\msys64\usr\bin;%PATH%
+
+Build the program using make
+
+    make
+
+The application creates a tray icon, but has no other user interface.
+Double-click on the tray icon to close the app.

@@ -1,2 +1,0 @@
-#!/bin/sh
-gcc -Wall -Werror -g -O0 -o default_volume default_volume.c -lshlwapi -lole32

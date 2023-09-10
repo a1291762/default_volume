@@ -1,15 +1,14 @@
-#ifndef UNICODE
-#define UNICODE
-#endif 
 #include <windows.h>
-#include <shlwapi.h>
 #include <stdio.h>
+#include <shlwapi.h>
 #include <initguid.h>
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
 #include <psapi.h>
 
 #define AUDCLNT_S_NO_SINGLE_PROCESS AUDCLNT_SUCCESS (0x00d)
+
+HKEY property_store = NULL;
 
 LSTATUS get_volume_control(TCHAR *executable_name, ISimpleAudioVolume **volume) {
 	LSTATUS err = -1;
@@ -236,7 +235,6 @@ cleanup:
 int monitor_registry() {
 	int ret = 1;
 
-	HKEY property_store = {0};
 	LSTATUS err = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\Microsoft\\Internet Explorer\\LowRegistry\\Audio\\PolicyConfig\\PropertyStore",
 			0, KEY_READ|KEY_NOTIFY, &property_store);
 	if (err != ERROR_SUCCESS) {
@@ -301,30 +299,12 @@ int monitor_registry() {
 cleanup:
 	if (property_store) {
 		err = RegCloseKey(property_store);
+		property_store = NULL;
 		if (err != ERROR_SUCCESS) {
 			printf("Failed to RegCloseKey\n");
 			return 1;
 		}
 	}
-
-	return ret;
-}
-
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, int nCmdShow) {
-	int ret = 1;
-
-	// This needs to be called once when using COM
-	HRESULT hr;
-	hr = CoInitialize(NULL);
-	if (hr != S_OK) {
-		printf("Failed to CoInitialize %lx\n", hr);
-		goto cleanup;
-	}
-
-	ret = monitor_registry();
-
-cleanup:
-	CoUninitialize();
 
 	return ret;
 }
