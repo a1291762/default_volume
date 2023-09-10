@@ -6,9 +6,10 @@
 #include <audiopolicy.h>
 #include <psapi.h>
 
-#define AUDCLNT_S_NO_SINGLE_PROCESS AUDCLNT_SUCCESS (0x00d)
+extern void dbglog(const char *format, ...);
+extern void wdbglog(const TCHAR *format, ...);
 
-HKEY property_store = NULL;
+#define AUDCLNT_S_NO_SINGLE_PROCESS AUDCLNT_SUCCESS (0x00d)
 
 LSTATUS get_volume_control(TCHAR *executable_name, ISimpleAudioVolume **volume) {
 	LSTATUS err = -1;
@@ -27,35 +28,35 @@ LSTATUS get_volume_control(TCHAR *executable_name, ISimpleAudioVolume **volume) 
 			CLSCTX_ALL, &IID_IMMDeviceEnumerator,
 			(void**)&device_enumerator);
 	if (hr != S_OK) {
-		printf("Failed to CoCreateInstance %lx\n", hr);
+		dbglog("Failed to CoCreateInstance %lx\n", hr);
 		goto cleanup;
 	}
 
 	// speakers
 	hr = device_enumerator->lpVtbl->GetDefaultAudioEndpoint(device_enumerator, eRender, eMultimedia, &speakers);
 	if (hr != S_OK) {
-		printf("Failed to GetDefaultAudioEndpoint %lx\n", hr);
+		dbglog("Failed to GetDefaultAudioEndpoint %lx\n", hr);
 		goto cleanup;
 	}
 
 	// manager
 	hr = speakers->lpVtbl->Activate(speakers, &IID_IAudioSessionManager2, CLSCTX_ALL, NULL, (void**)&session_manager);
 	if (hr != S_OK) {
-		printf("Failed to Activate %lx\n", hr);
+		dbglog("Failed to Activate %lx\n", hr);
 		goto cleanup;
 	}
 	
 	// session_enumerator
 	hr = session_manager->lpVtbl->GetSessionEnumerator(session_manager, &session_enumerator);
 	if (hr != S_OK) {
-		printf("Failed to GetSessionEnumerator %lx\n", hr);
+		dbglog("Failed to GetSessionEnumerator %lx\n", hr);
 		goto cleanup;
 	}
 
 	int count;
 	hr = session_enumerator->lpVtbl->GetCount(session_enumerator, &count);
 	if (hr != S_OK) {
-		printf("Failed to GetCount %lx\n", hr);
+		dbglog("Failed to GetCount %lx\n", hr);
 		goto cleanup;
 	}
 
@@ -63,13 +64,13 @@ LSTATUS get_volume_control(TCHAR *executable_name, ISimpleAudioVolume **volume) 
 	for (int i = 0; i < count; i++) {
 		hr = session_enumerator->lpVtbl->GetSession(session_enumerator, i, &session_control);
 		if (hr != S_OK) {
-			printf("Failed to GetSession %lx\n", hr);
+			dbglog("Failed to GetSession %lx\n", hr);
 			continue;
 		}
 
 		hr = session_control->lpVtbl->QueryInterface(session_control, &IID_IAudioSessionControl2, (void**)&session_control_2);
 		if (hr != S_OK) {
-			printf("Failed to QueryInterface\n");
+			dbglog("Failed to QueryInterface\n");
 			goto cleanup;
 		}
 
@@ -77,28 +78,28 @@ LSTATUS get_volume_control(TCHAR *executable_name, ISimpleAudioVolume **volume) 
 		DWORD pid = 0;
 		hr = session_control_2->lpVtbl->GetProcessId(session_control_2, &pid);
 		if (hr != S_OK && hr != AUDCLNT_S_NO_SINGLE_PROCESS) {
-			printf("Failed to GetProcessId %lx\n", hr);
+			dbglog("Failed to GetProcessId %lx\n", hr);
 			goto cleanup;
 		}
 
 		if (pid != 0) {
-			printf("Audio Session PID %ld\n", pid);
+			dbglog("Audio Session PID %ld\n", pid);
 
 			TCHAR process_filename[200] = {0};
 			HANDLE h = OpenProcess(READ_CONTROL|PROCESS_QUERY_INFORMATION|PROCESS_VM_READ, FALSE, pid);
 			if (!h) {
-				printf("Failed to OpenProcess\n");
+				dbglog("Failed to OpenProcess\n");
 				goto cleanup;
 			}
 			DWORD len = GetModuleFileNameEx(h, NULL, process_filename, sizeof(process_filename));
 			if (!CloseHandle(h)) {
-				printf("Failed to CloseHandle\n");
+				dbglog("Failed to CloseHandle\n");
 				goto cleanup;
 			}
 
 			if (len) {
 				if (wcsstr(executable_name, &process_filename[2]) != NULL) {
-					wprintf(L"Process filename matches registry %ls\n", &process_filename[2]);
+					wdbglog(L"Process filename matches registry %ls\n", &process_filename[2]);
 					// return the volume interface
 					session_control->lpVtbl->QueryInterface(session_control, &IID_ISimpleAudioVolume, (void**)volume);
 					err = ERROR_SUCCESS;
@@ -133,7 +134,7 @@ LSTATUS set_volume(HKEY property) {
 	DWORD len = sizeof(value);
 	err = RegGetValue(property, NULL, L"", RRF_RT_REG_SZ, NULL, value, &len);
 	if (err != ERROR_SUCCESS) {
-		printf("Failed to RegGetValue\n");
+		dbglog("Failed to RegGetValue\n");
 		return err;
 	}
 	TCHAR *context;
@@ -145,7 +146,7 @@ LSTATUS set_volume(HKEY property) {
 	ISimpleAudioVolume *volume = NULL;
 	err = get_volume_control(executable_name, &volume);
 	if (err != ERROR_SUCCESS) {
-		printf("Failed to get_volume_control\n");
+		dbglog("Failed to get_volume_control\n");
 		return err;
 	}
 
@@ -155,9 +156,9 @@ LSTATUS set_volume(HKEY property) {
 	}
 	HRESULT hr = volume->lpVtbl->SetMasterVolume(volume, percent/100.0f, NULL);
 	if (hr != S_OK) {
-		printf("Failed to SetMasterVolume %lx\n", hr);
+		dbglog("Failed to SetMasterVolume %lx\n", hr);
 	}
-	printf("Set the volume to %d%%\n", percent);
+	dbglog("Set the volume to %d%%\n", percent);
 
 	volume->lpVtbl->Release(volume);
 
@@ -170,14 +171,14 @@ LSTATUS handle_new_property(HKEY property_store, TCHAR *name) {
 	HKEY property;
 	err = RegOpenKeyEx(property_store, name, 0, KEY_READ, &property);
 	if (err != ERROR_SUCCESS) {
-		printf("Failed to RegOpenKeyEx\n");
+		dbglog("Failed to RegOpenKeyEx\n");
 		return err;
 	}
 
 	HKEY volume_store = {0};
 	err = RegOpenKeyEx(property, L"{219ED5A0-9CBF-4F3A-B927-37C9E5C5F14F}", 0, KEY_READ, &volume_store);
 	if (err == ERROR_SUCCESS) {
-		printf("Property has volume settings\n");
+		dbglog("Property has volume settings\n");
 		goto cleanup;
 	}
 
@@ -188,13 +189,13 @@ cleanup:
 	if (volume_store) {
 		err = RegCloseKey(volume_store);
 		if (err != ERROR_SUCCESS) {
-			printf("Failed to RegCloseKey\n");
+			dbglog("Failed to RegCloseKey\n");
 		}
 	}
 
 	err = RegCloseKey(property);
 	if (err != ERROR_SUCCESS) {
-		printf("Failed to RegCloseKey\n");
+		dbglog("Failed to RegCloseKey\n");
 	}
 
 	return err;
@@ -207,7 +208,7 @@ LSTATUS get_last_modified(HKEY parent_key, TCHAR *sub_key, ULARGE_INTEGER *last_
 	if (sub_key) {
 		err = RegOpenKeyEx(parent_key, sub_key, 0, KEY_READ, &hkey);
 		if (err != ERROR_SUCCESS) {
-			printf("Failed to RegOpenKeyEx\n");
+			dbglog("Failed to RegOpenKeyEx\n");
 			return err;
 		}
 	} else {
@@ -217,7 +218,7 @@ LSTATUS get_last_modified(HKEY parent_key, TCHAR *sub_key, ULARGE_INTEGER *last_
 	FILETIME ft;
 	err = RegQueryInfoKey(hkey, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &ft);
 	if (err != ERROR_SUCCESS) {
-		printf("Failed to RegQueryInfoKey\n");
+		dbglog("Failed to RegQueryInfoKey\n");
 		goto cleanup;
 	}
 
@@ -229,29 +230,31 @@ cleanup:
 	if (sub_key && hkey) {
 		err = RegCloseKey(hkey);
 		if (err != ERROR_SUCCESS) {
-			printf("Failed to RegCloseKey\n");
+			dbglog("Failed to RegCloseKey\n");
 		}
 	}
 
 	return err;
 }
 
-int monitor_registry() {
+int monitor_registry(HKEY *g_property_store) {
 	int ret = 1;
 
+	HKEY property_store = NULL;
 	LSTATUS err = RegOpenKeyEx(HKEY_CURRENT_USER, L"Software\\Microsoft\\Internet Explorer\\LowRegistry\\Audio\\PolicyConfig\\PropertyStore",
 			0, KEY_READ|KEY_NOTIFY, &property_store);
 	if (err != ERROR_SUCCESS) {
-		printf("Failed to RegOpenKeyEx\n");
+		dbglog("Failed to RegOpenKeyEx\n");
 		goto cleanup;
 	}
+	*g_property_store = property_store;
 
-	printf("Waiting for registry changes...\n");
+	dbglog("Waiting for registry changes...\n");
 	for (;;) {
 		ULARGE_INTEGER property_last_modified;
 		err = get_last_modified(property_store, NULL, &property_last_modified);
 		if (err != ERROR_SUCCESS) {
-			printf("Failed to get_last_modified\n");
+			dbglog("Failed to get_last_modified\n");
 			goto cleanup;
 		}
 
@@ -259,15 +262,15 @@ int monitor_registry() {
 				REG_NOTIFY_CHANGE_NAME|REG_NOTIFY_CHANGE_ATTRIBUTES|REG_NOTIFY_CHANGE_LAST_SET,
 				NULL, FALSE);
 		if (err != ERROR_SUCCESS) {
-			printf("Failed to RegNotifyChangeKeyValue\n");
+			dbglog("Failed to RegNotifyChangeKeyValue\n");
 			goto cleanup;
 		}
-		printf("The registry changed!\n");
+		dbglog("The registry changed!\n");
 
 		DWORD sub_key_count;
 		err = RegQueryInfoKey(property_store, NULL, NULL, NULL, &sub_key_count, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 		if (err != ERROR_SUCCESS) {
-			printf("Failed to RegQueryInfoKey\n");
+			dbglog("Failed to RegQueryInfoKey\n");
 			goto cleanup;
 		}
 
@@ -276,23 +279,23 @@ int monitor_registry() {
 			TCHAR name[200];
 			err = RegEnumKey(property_store, i, name, sizeof(name));
 			if (err != ERROR_SUCCESS) {
-				printf("Failed to RegEnumKey\n");
+				dbglog("Failed to RegEnumKey\n");
 				goto cleanup;
 			}
 
 			ULARGE_INTEGER sub_last_modified;
 			err = get_last_modified(property_store, name, &sub_last_modified);
 			if (err != ERROR_SUCCESS) {
-				printf("Failed to get_last_modified\n");
+				dbglog("Failed to get_last_modified\n");
 				goto cleanup;
 			}
 
 			if (sub_last_modified.QuadPart > property_last_modified.QuadPart) {
-				wprintf(L"Found newer sub-key %ls\n", name);
+				wdbglog(L"Found newer sub-key %ls\n", name);
 
 				err = handle_new_property(property_store, name);
 				if (err != ERROR_SUCCESS) {
-					printf("Failed to handle_new_property\n");
+					dbglog("Failed to handle_new_property\n");
 					goto cleanup;
 				}
 			}
@@ -303,9 +306,9 @@ int monitor_registry() {
 cleanup:
 	if (property_store) {
 		err = RegCloseKey(property_store);
-		property_store = NULL;
+		*g_property_store = NULL;
 		if (err != ERROR_SUCCESS) {
-			printf("Failed to RegCloseKey\n");
+			dbglog("Failed to RegCloseKey\n");
 			return 1;
 		}
 	}

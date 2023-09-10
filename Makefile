@@ -1,6 +1,6 @@
 # program definition
 TARGET = default_volume
-OBJECTS = my.res.o default_volume.o trayicon.o main.o
+OBJECTS = my.res.o default_volume.o trayicon.o main.o log.o
 
 # enable "all" warnings and treat warnings as errors
 CFLAGS += -Wall -Werror

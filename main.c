@@ -1,19 +1,23 @@
 #include <windows.h>
 #include <stdio.h>
 
-int monitor_registry();
-HWND create_tray_icon(HINSTANCE hInstance);
+extern void dbglog(const char *format, ...);
+extern void wdbglog(const TCHAR *format, ...);
+extern int monitor_registry(HKEY *g_property_store);
+extern HWND create_tray_icon(HINSTANCE hInstance, HKEY *g_property_store);
+
+static HKEY property_store;
 
 DWORD WINAPI MyThreadFunction(LPVOID lpParam) {
 	// This needs to be called once when using COM
 	HRESULT hr;
 	hr = CoInitialize(NULL);
 	if (hr != S_OK) {
-		printf("Failed to CoInitialize %lx\n", hr);
+		dbglog("Failed to CoInitialize %lx\n", hr);
 		goto cleanup;
 	}
 
-	int ret = monitor_registry();
+	int ret = monitor_registry(&property_store);
 
 cleanup:
 	CoUninitialize();
@@ -27,7 +31,7 @@ cleanup:
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PTSTR lpCmdLine, int nCmdShow) {
 	// the tray icon lives on the main thread
-	HWND hwnd = create_tray_icon(hInstance);
+	HWND hwnd = create_tray_icon(hInstance, &property_store);
 
 	// the registry listener runs in a separate thread
 	HANDLE thread = CreateThread(NULL, 0, MyThreadFunction, hwnd, 0, NULL);

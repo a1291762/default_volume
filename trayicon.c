@@ -5,13 +5,16 @@
 
 #include <assert.h>
 
+extern void dbglog(const char *format, ...);
+extern void wdbglog(const TCHAR *format, ...);
+
 #define IDI_TRAYICON 2
 #define WM_USER_SHELLICON (WM_USER+1)
 
-extern HKEY property_store;
+static HKEY *g_property_store;
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
-	// printf("WindowProc uMsg %d wParam %lld, lParam %lld\n", uMsg, wParam, lParam);
+	// dbglog("WindowProc uMsg %d wParam %lld, lParam %lld\n", uMsg, wParam, lParam);
 	switch (uMsg) {
 	case WM_USER_SHELLICON:
 		switch (lParam) {
@@ -25,12 +28,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 			data.uID = IDI_TRAYICON;
 			Shell_NotifyIcon(NIM_DELETE, &data);
 
+			HKEY property_store = *g_property_store;
 			if (property_store) {
 				// stop the worker thread
 				LSTATUS err = RegCloseKey(property_store);
-				property_store = NULL;
+				*g_property_store = NULL;
 				if (err != ERROR_SUCCESS) {
-					printf("Failed to RegCloseKey from WindowProc\n");
+					dbglog("Failed to RegCloseKey from WindowProc\n");
 				}
 			}
 
@@ -49,7 +53,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 	return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-HWND create_tray_icon(HINSTANCE hInstance) {
+HWND create_tray_icon(HINSTANCE hInstance, HKEY *_property_store) {
+	g_property_store = _property_store;
 	const wchar_t CLASS_NAME[]  = L"Dummy Window";
 	WNDCLASS wc = {0};
 	wc.lpfnWndProc   = WindowProc;
@@ -62,7 +67,7 @@ HWND create_tray_icon(HINSTANCE hInstance) {
 		NULL, NULL, hInstance, NULL);
 	if (!hwnd) {
 		DWORD error = GetLastError();
-		printf("got error %lx\n", error);
+		dbglog("got error %lx\n", error);
 		return NULL;
 	}
 
@@ -74,7 +79,7 @@ HWND create_tray_icon(HINSTANCE hInstance) {
 	data.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_TRAYICON));
 	data.uCallbackMessage = WM_USER_SHELLICON;
 	if (!Shell_NotifyIcon(NIM_ADD, &data)) {
-		printf("failed to add tray icon\n");
+		dbglog("failed to add tray icon\n");
 		// FIXME deallocate the window?
 		return NULL;
 	}
