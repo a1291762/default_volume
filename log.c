@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <strsafe.h>
 
+
 // this variant is more convenient (doesn't need a wide format string)
 void dbglog(const char *format, ...) {
 	char buffer[10000];
@@ -15,6 +16,7 @@ void dbglog(const char *format, ...) {
 		printf("%s", buffer);
 	}
 }
+
 
 // I think this variant is needed to print wide strings?
 void wdbglog(const TCHAR *format, ...) {

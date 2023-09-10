@@ -5,12 +5,14 @@
 #include <mmdeviceapi.h>
 #include <audiopolicy.h>
 #include <psapi.h>
+#include "api.h"
 
-extern void dbglog(const char *format, ...);
-extern void wdbglog(const TCHAR *format, ...);
-
+// apparently this was missed from the windows headers?
 #define AUDCLNT_S_NO_SINGLE_PROCESS AUDCLNT_SUCCESS (0x00d)
 
+
+// returns an ISimpleAudioVolume for an application
+// demonstrates the fun of calling COM from a C application
 LSTATUS get_volume_control(TCHAR *executable_name, ISimpleAudioVolume **volume) {
 	LSTATUS err = -1;
 
@@ -126,6 +128,8 @@ cleanup:
 }
 
 
+// given a new registry key, try to match the executable name with an active
+// audio session and then set the volume
 LSTATUS set_volume(HKEY property) {
 	LSTATUS err;
 
@@ -150,10 +154,8 @@ LSTATUS set_volume(HKEY property) {
 		return err;
 	}
 
+	// if present, default_volume.ini can be used to change the hard-coded default of 40%
 	int percent = GetPrivateProfileInt(L"Default", L"Volume", 40, L".\\default_volume.ini");
-	if (percent <= 0 || percent > 100) {
-		percent = 40;
-	}
 	HRESULT hr = volume->lpVtbl->SetMasterVolume(volume, percent/100.0f, NULL);
 	if (hr != S_OK) {
 		dbglog("Failed to SetMasterVolume %lx\n", hr);
@@ -165,6 +167,9 @@ LSTATUS set_volume(HKEY property) {
 	return ERROR_SUCCESS;
 }
 
+
+// the named property is newer than the property store
+// confirm that it is new, then attempt to set the volume
 LSTATUS handle_new_property(HKEY property_store, TCHAR *name) {
 	LSTATUS err;
 
@@ -201,6 +206,8 @@ cleanup:
 	return err;
 }
 
+
+// get the last modified time of a registry key with optional sub key
 LSTATUS get_last_modified(HKEY parent_key, TCHAR *sub_key, ULARGE_INTEGER *last_modified) {
 	LSTATUS err;
 	HKEY hkey = {0};
@@ -237,6 +244,8 @@ cleanup:
 	return err;
 }
 
+
+// monitor the registry for changes to the audio property store
 int monitor_registry(HKEY *g_property_store) {
 	int ret = 1;
 
@@ -247,6 +256,7 @@ int monitor_registry(HKEY *g_property_store) {
 		dbglog("Failed to RegOpenKeyEx\n");
 		goto cleanup;
 	}
+	// copy the property store over here so that closing the app via the UI is possible
 	*g_property_store = property_store;
 
 	dbglog("Waiting for registry changes...\n");
@@ -265,6 +275,17 @@ int monitor_registry(HKEY *g_property_store) {
 			dbglog("Failed to RegNotifyChangeKeyValue\n");
 			goto cleanup;
 		}
+
+		// closing the app from the tray icon sets this to NULL and
+		// then closes the registry key, which causes the call above
+		// to abort
+		property_store = *g_property_store;
+		if (!property_store) {
+			dbglog("The app was closed via tray icon\n");
+			ret = 0;
+			goto cleanup;
+		}
+
 		dbglog("The registry changed!\n");
 
 		DWORD sub_key_count;
@@ -305,8 +326,8 @@ int monitor_registry(HKEY *g_property_store) {
 	ret = 0;
 cleanup:
 	if (property_store) {
-		err = RegCloseKey(property_store);
 		*g_property_store = NULL;
+		err = RegCloseKey(property_store);
 		if (err != ERROR_SUCCESS) {
 			dbglog("Failed to RegCloseKey\n");
 			return 1;

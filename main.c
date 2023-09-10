@@ -1,13 +1,11 @@
 #include <windows.h>
 #include <stdio.h>
-
-extern void dbglog(const char *format, ...);
-extern void wdbglog(const TCHAR *format, ...);
-extern int monitor_registry(HKEY *g_property_store);
-extern HWND create_tray_icon(HINSTANCE hInstance, HKEY *g_property_store);
+#include "api.h"
 
 static HKEY property_store;
 
+
+// run the registry monitoring from a thread, since it uses blocking calls
 DWORD WINAPI MyThreadFunction(LPVOID lpParam) {
 	// This needs to be called once when using COM
 	HRESULT hr;
@@ -22,12 +20,13 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam) {
 cleanup:
 	CoUninitialize();
 
-	// close the tray icon
+	// instruct the tray icon to close (which will quit the app)
 	HWND hwnd = (HWND)lpParam;
 	PostMessage(hwnd, WM_CLOSE, 0, 0);
 
 	return ret;
 }
+
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PTSTR lpCmdLine, int nCmdShow) {
 	// the tray icon lives on the main thread
@@ -43,7 +42,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PTSTR lpCmdLin
 		DispatchMessage(&msg);
 	}
 
+	// wait for the thread to exit (should be immediate)
 	WaitForMultipleObjects(1, &thread, TRUE, INFINITE);
+	// the thread's exit code is returned from the process
 	DWORD exitCode;
 	GetExitCodeThread(thread, &exitCode);
 	CloseHandle(&thread);

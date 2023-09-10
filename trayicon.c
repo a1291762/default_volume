@@ -2,17 +2,15 @@
 #include <stdio.h>
 #include <shellapi.h>
 #include <winuser.h>
-
-#include <assert.h>
-
-extern void dbglog(const char *format, ...);
-extern void wdbglog(const TCHAR *format, ...);
+#include "api.h"
 
 #define IDI_TRAYICON 2
 #define WM_USER_SHELLICON (WM_USER+1)
 
 static HKEY *g_property_store;
 
+
+// this function is passed messages for the hidden window
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
 	// dbglog("WindowProc uMsg %d wParam %lld, lParam %lld\n", uMsg, wParam, lParam);
 	switch (uMsg) {
@@ -31,8 +29,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 			HKEY property_store = *g_property_store;
 			if (property_store) {
 				// stop the worker thread
-				LSTATUS err = RegCloseKey(property_store);
 				*g_property_store = NULL;
+				LSTATUS err = RegCloseKey(property_store);
 				if (err != ERROR_SUCCESS) {
 					dbglog("Failed to RegCloseKey from WindowProc\n");
 				}
@@ -43,6 +41,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 			break;
 		}
 		break;
+
 	case WM_CLOSE:
 		// the worker thread sends this when it exits
 
@@ -50,11 +49,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 		PostQuitMessage(0);
 		break;
 	}
+
 	return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
+
+// create a hidden window, which will own the tray icon
 HWND create_tray_icon(HINSTANCE hInstance, HKEY *_property_store) {
 	g_property_store = _property_store;
+
+	// this window isn't visible, but there must be a window...
 	const wchar_t CLASS_NAME[]  = L"Dummy Window";
 	WNDCLASS wc = {0};
 	wc.lpfnWndProc   = WindowProc;
@@ -71,6 +75,7 @@ HWND create_tray_icon(HINSTANCE hInstance, HKEY *_property_store) {
 		return NULL;
 	}
 
+	// the tray icon
 	NOTIFYICONDATA data = {0};
 	data.cbSize = sizeof(NOTIFYICONDATA);
 	data.hWnd = hwnd;
